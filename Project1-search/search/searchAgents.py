@@ -288,6 +288,8 @@ class CornersProblem(search.SearchProblem):
         # Please add any code here which you would like to use
         # in initializing the problem
         "*** YOUR CODE HERE ***"
+        # Track which corners have been visited (initial state)
+        self.initial_visited = tuple([self.startingPosition == corner for corner in self.corners])
 
     def getStartState(self):
         """
@@ -295,14 +297,14 @@ class CornersProblem(search.SearchProblem):
         space)
         """
         "*** YOUR CODE HERE ***"
-        util.raiseNotDefined()
+        return (self.startingPosition, self.initial_visited)
 
     def isGoalState(self, state):
         """
         Returns whether this search state is a goal state of the problem.
         """
         "*** YOUR CODE HERE ***"
-        util.raiseNotDefined()
+        return all(state[1])
 
     def getSuccessors(self, state):
         """
@@ -317,16 +319,22 @@ class CornersProblem(search.SearchProblem):
 
         successors = []
         for action in [Directions.NORTH, Directions.SOUTH, Directions.EAST, Directions.WEST]:
-            # Add a successor state to the successor list if the action is legal
-            # Here's a code snippet for figuring out whether a new position hits a wall:
-            #   x,y = currentPosition
-            #   dx, dy = Actions.directionToVector(action)
-            #   nextx, nexty = int(x + dx), int(y + dy)
-            #   hitsWall = self.walls[nextx][nexty]
-
-            "*** YOUR CODE HERE ***"
-
-        self._expanded += 1 # DO NOT CHANGE
+            x,y = state[0][0], state[0][1]
+            dx, dy = Actions.directionToVector(action)
+            nextx, nexty = int(x + dx), int(y + dy)
+            
+            if not self.walls[nextx][nexty]:
+                next_pos = (nextx, nexty)
+                # Update visited corners
+                new_visited = list(state[1])
+                for i, corner in enumerate(self.corners):
+                    if next_pos == corner:
+                        new_visited[i] = True
+                new_state = (next_pos, tuple(new_visited))
+                
+                successors.append((new_state, action, 1))
+        
+        self._expanded += 1
         return successors
 
     def getCostOfActions(self, actions):
@@ -356,11 +364,43 @@ def cornersHeuristic(state, problem):
     shortest path from the state to a goal of the problem; i.e.  it should be
     admissible (as well as consistent).
     """
-    corners = problem.corners # These are the corner coordinates
-    walls = problem.walls # These are the walls of the maze, as a Grid (game.py)
-
-    "*** YOUR CODE HERE ***"
-    return 0 # Default to trivial solution
+    corners = problem.corners
+    current_pos, visited = state
+    unvisited = [corner for i, corner in enumerate(corners) if not visited[i]]
+    
+    if not unvisited:
+        return 0
+    
+    # Calculate minimum distance to any unvisited corner
+    min_dist = min(abs(current_pos[0] - c[0]) + abs(current_pos[1] - c[1]) for c in unvisited)
+    
+    if len(unvisited) == 1:
+        return min_dist
+    
+    # Generate all pairwise distances between unvisited corners
+    edges = []
+    for i in range(len(unvisited)):
+        for j in range(i+1, len(unvisited)):
+            dist = abs(unvisited[i][0] - unvisited[j][0]) + abs(unvisited[i][1] - unvisited[j][1])
+            edges.append((dist, i, j))
+    
+    # Kruskal's algorithm for Minimum Spanning Tree
+    edges.sort()
+    parent = list(range(len(unvisited)))
+    
+    def find(u):
+        while parent[u] != u:
+            parent[u] = parent[parent[u]]  # Path compression
+            u = parent[u]
+        return u
+    
+    mst_total = 0
+    for dist, u, v in edges:
+        if find(u) != find(v):
+            mst_total += dist
+            parent[find(v)] = find(u)
+    
+    return min_dist + mst_total
 
 class AStarCornersAgent(SearchAgent):
     "A SearchAgent for FoodSearchProblem using A* and your foodHeuristic"
@@ -425,36 +465,45 @@ class AStarFoodSearchAgent(SearchAgent):
         self.searchType = FoodSearchProblem
 
 def foodHeuristic(state, problem):
-    """
-    Your heuristic for the FoodSearchProblem goes here.
-
-    This heuristic must be consistent to ensure correctness.  First, try to come
-    up with an admissible heuristic; almost all admissible heuristics will be
-    consistent as well.
-
-    If using A* ever finds a solution that is worse uniform cost search finds,
-    your heuristic is *not* consistent, and probably not admissible!  On the
-    other hand, inadmissible or inconsistent heuristics may find optimal
-    solutions, so be careful.
-
-    The state is a tuple ( pacmanPosition, foodGrid ) where foodGrid is a Grid
-    (see game.py) of either True or False. You can call foodGrid.asList() to get
-    a list of food coordinates instead.
-
-    If you want access to info like walls, capsules, etc., you can query the
-    problem.  For example, problem.walls gives you a Grid of where the walls
-    are.
-
-    If you want to *store* information to be reused in other calls to the
-    heuristic, there is a dictionary called problem.heuristicInfo that you can
-    use. For example, if you only want to count the walls once and store that
-    value, try: problem.heuristicInfo['wallCount'] = problem.walls.count()
-    Subsequent calls to this heuristic can access
-    problem.heuristicInfo['wallCount']
-    """
     position, foodGrid = state
-    "*** YOUR CODE HERE ***"
-    return 0
+    foodList = foodGrid.asList()
+    
+    if not foodList:
+        return 0
+
+    # Calculate distance to closest food
+    closest = min(util.manhattanDistance(position, food) for food in foodList)
+    
+    # Calculate MST of remaining food
+    if len(foodList) == 1:
+        return closest
+    
+    # Generate all pairwise distances between food pellets
+    edges = []
+    for i in range(len(foodList)):
+        for j in range(i+1, len(foodList)):
+            dist = util.manhattanDistance(foodList[i], foodList[j])
+            edges.append((dist, i, j))
+    
+    # Kruskal's algorithm for MST
+    edges.sort()
+    parent = list(range(len(foodList)))
+    
+    def find(u):
+        while parent[u] != u:
+            parent[u] = parent[parent[u]]  # Path compression
+            u = parent[u]
+        return u
+    
+    mst = 0
+    for dist, u, v in edges:
+        rootU = find(u)
+        rootV = find(v)
+        if rootU != rootV:
+            mst += dist
+            parent[rootV] = rootU
+
+    return closest + mst
 
 class ClosestDotSearchAgent(SearchAgent):
     "Search for all food using a sequence of searches"
@@ -485,7 +534,7 @@ class ClosestDotSearchAgent(SearchAgent):
         problem = AnyFoodSearchProblem(gameState)
 
         "*** YOUR CODE HERE ***"
-        util.raiseNotDefined()
+        return search.bfs(problem)
 
 class AnyFoodSearchProblem(PositionSearchProblem):
     """
@@ -521,7 +570,7 @@ class AnyFoodSearchProblem(PositionSearchProblem):
         x,y = state
 
         "*** YOUR CODE HERE ***"
-        util.raiseNotDefined()
+        return self.food[x][y]
 
 def mazeDistance(point1, point2, gameState):
     """
