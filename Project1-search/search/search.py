@@ -111,12 +111,51 @@ def depthFirstSearch(problem):
 def breadthFirstSearch(problem):
     """Search the shallowest nodes in the search tree first."""
     "*** YOUR CODE HERE ***"
-    util.raiseNotDefined()
+    from util import Queue
+    frontier = Queue()
+    visited = set()
+    frontier.push((problem.getStartState(), []))
+    
+    while not frontier.isEmpty():
+        current_state, actions = frontier.pop()
+        
+        if problem.isGoalState(current_state):
+            return actions
+            
+        if current_state not in visited:
+            visited.add(current_state)
+            for next_state, action, _ in problem.getSuccessors(current_state):
+                if next_state not in visited:
+                    frontier.push((next_state, actions + [action]))
+    
+    return []
 
 def uniformCostSearch(problem):
     """Search the node of least total cost first."""
     "*** YOUR CODE HERE ***"
-    util.raiseNotDefined()
+    from util import PriorityQueue
+    frontier = PriorityQueue()
+    visited = {}
+    start_state = problem.getStartState()
+    frontier.push((start_state, [], 0), 0)
+    
+    while not frontier.isEmpty():
+        current_state, actions, current_cost = frontier.pop()
+        
+        if problem.isGoalState(current_state):
+            return actions
+            
+        if current_state in visited and current_cost >= visited[current_state]:
+            continue
+            
+        visited[current_state] = current_cost
+        
+        for next_state, action, step_cost in problem.getSuccessors(current_state):
+            new_cost = current_cost + step_cost
+            if next_state not in visited or new_cost < visited.get(next_state, float('inf')):
+                frontier.update((next_state, actions + [action], new_cost), new_cost)
+    
+    return []
 
 def nullHeuristic(state, problem=None):
     """
@@ -128,7 +167,32 @@ def nullHeuristic(state, problem=None):
 def aStarSearch(problem, heuristic=nullHeuristic):
     """Search the node that has the lowest combined cost and heuristic first."""
     "*** YOUR CODE HERE ***"
-    util.raiseNotDefined()
+    from util import PriorityQueue
+    frontier = PriorityQueue()
+    visited = {}
+    start_state = problem.getStartState()
+    initial_cost = 0
+    initial_priority = initial_cost + heuristic(start_state, problem)
+    frontier.push((start_state, [], initial_cost), initial_priority)
+    
+    while not frontier.isEmpty():
+        current_state, actions, current_cost = frontier.pop()
+        
+        if problem.isGoalState(current_state):
+            return actions
+            
+        if current_state in visited and current_cost >= visited[current_state]:
+            continue
+            
+        visited[current_state] = current_cost
+        
+        for next_state, action, step_cost in problem.getSuccessors(current_state):
+            new_cost = current_cost + step_cost
+            new_priority = new_cost + heuristic(next_state, problem)
+            if next_state not in visited or new_cost < visited.get(next_state, float('inf')):
+                frontier.update((next_state, actions + [action], new_cost), new_priority)
+    
+    return []
 
 
 # Abbreviations
